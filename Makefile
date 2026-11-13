@@ -22,7 +22,7 @@ JIO_CPPFLAGS := -DAST_MODULE=\"res_pjsip_jio\" -DAST_MODULE_SELF_SYM=__internal_
 JIO_TEST_CPPFLAGS := -DAST_MODULE=\"jio_contact_test\" -DAST_MODULE_SELF_SYM=__internal_jio_contact_test_self
 MODULES := $(BUILD)/codec_amr.so $(BUILD)/res_pjsip_amr.so $(BUILD)/res_pjsip_jio.so
 
-.PHONY: all check-sdk test test-payload test-integration test-lifecycle install clean
+.PHONY: all check-sdk test test-payload test-integration test-lifecycle install package clean
 all: $(MODULES)
 
 $(BUILD):
@@ -81,6 +81,9 @@ test: test-payload test-integration test-lifecycle
 install: all
 	install -d "$(DESTDIR)$(MODULE_DIR)"
 	install -m 755 $(MODULES) "$(DESTDIR)$(MODULE_DIR)/"
+
+package: all
+	$(PYTHON) scripts/package.py
 
 clean:
 	rm -rf $(BUILD)

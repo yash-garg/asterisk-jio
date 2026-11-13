@@ -88,10 +88,11 @@ nix build .#asterisk-with-jio
 nix flake check
 ```
 
-## Tests
+## Tests and releases
 
 ```sh
 make ASTERISK_SRC=/path/to/asterisk-22.11.0 ASTERISK_PREFIX=/path/to/install test
+docker build -f ci/Dockerfile -t asterisk-jio-test .
 ```
 
 Tests use a separate localhost Asterisk and a dummy local registrar. They verify Jio
@@ -104,6 +105,13 @@ AMR supports mono audio, both RTP alignments, and multiple received frames per p
 It sends one 20 ms frame at the lowest negotiated mode. Adaptive bitrate, DTX encoding,
 CRC, interleaving, and robust sorting are not implemented. Carrier routing behavior
 still requires live call validation; passing these tests does not prove an MNP fix.
+
+CI builds natively on x86_64 and ARM64. Version tags create draft releases containing
+all three modules, source, checksums, and SDK metadata. Release versions come from
+the Git tag; branch builds use the commit ID. Binary archives target the
+reference Ubuntu 24.04 build in `ci/Dockerfile`; other Asterisk builds need a rebuild
+against their own SDK. Runtime codec libraries are not bundled. Local x86_64 results
+do not validate ARM64; the corresponding CI job must pass.
 
 AMR is based on [traud/asterisk-amr](https://github.com/traud/asterisk-amr), with bounds
 checks, negotiation fixes, and standalone registration. GPL-2.0-only; see
