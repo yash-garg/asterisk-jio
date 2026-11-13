@@ -65,6 +65,23 @@ Restart Asterisk, then check `module show like amr`, `module show like jio`,
 G.711; Asterisk transcodes. AMR modules remain loaded until shutdown, so upgrades
 require a restart. Use a stock Asterisk core.
 
+## Tests
+
+```sh
+make ASTERISK_SRC=/path/to/asterisk-22.11.0 ASTERISK_PREFIX=/path/to/install test
+```
+
+Tests use a separate localhost Asterisk and a dummy local registrar. They verify Jio
+Digest challenge handling and Contact serialization alongside 34 AMR audio
+mode/alignment combinations, real SIP/RTP, invalid SDP, renegotiation, and module
+failure handling. Payload parsing runs under sanitizers. No test contacts Jio or
+reads your trunk credentials.
+
+AMR supports mono audio, both RTP alignments, and multiple received frames per packet.
+It sends one 20 ms frame at the lowest negotiated mode. Adaptive bitrate, DTX encoding,
+CRC, interleaving, and robust sorting are not implemented. Carrier routing behavior
+still requires live call validation; passing these tests does not prove an MNP fix.
+
 AMR is based on [traud/asterisk-amr](https://github.com/traud/asterisk-amr), with bounds
 checks, negotiation fixes, and standalone registration. GPL-2.0-only; see
 [LICENSE](LICENSE).
