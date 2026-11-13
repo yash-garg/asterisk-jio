@@ -1,0 +1,6 @@
+/build/
+/dist/
+/result*
+/.superpowers/
+__pycache__/
+*.pyc
