@@ -65,6 +65,29 @@ Restart Asterisk, then check `module show like amr`, `module show like jio`,
 G.711; Asterisk transcodes. AMR modules remain loaded until shutdown, so upgrades
 require a restart. Use a stock Asterisk core.
 
+## NixOS
+
+Add the input to your flake:
+
+```nix
+inputs.asterisk-jio.url = "github:yash-garg/asterisk-jio";
+```
+
+Then set this in a NixOS module receiving `inputs` and `pkgs`:
+
+```nix
+services.asterisk.package = inputs.asterisk-jio.packages.${pkgs.system}.asterisk-with-jio;
+```
+
+Keep the input's own pinned nixpkgs so the core and modules use the tested SDK.
+The `asterisk-with-jio` output contains Asterisk plus all three modules; the default
+`asterisk-jio` package contains the three modules alone. Keep the configuration above.
+
+```sh
+nix build .#asterisk-with-jio
+nix flake check
+```
+
 ## Tests
 
 ```sh
