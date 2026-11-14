@@ -50,7 +50,7 @@ stdenv.mkDerivation {
   postInstall = ''
     mkdir -p $out/share/asterisk-jio
     cp build/build-info.json README.md LICENSE $out/share/asterisk-jio/
-    cp -r examples $out/share/asterisk-jio/
+    cp -r examples patches $out/share/asterisk-jio/
   '';
   passthru = { inherit asterisk; };
   meta = {

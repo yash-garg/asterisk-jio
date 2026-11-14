@@ -87,4 +87,4 @@ jobs:
         run: |
           gh release create "$RELEASE_TAG" dist/* --verify-tag --draft \
             --title "$RELEASE_TAG" \
-            --notes "Jio IMS and AMR/AMR-WB addon for Asterisk 22.11.0. Binaries require the matching reference build; see README and build-info.json."
+            --notes "Jio IMS and AMR/AMR-WB addon for Asterisk 22.11.0. Stale-challenge recovery requires the included Asterisk core patch; the Nix package applies it automatically. Binaries require the matching reference build; see README and build-info.json."

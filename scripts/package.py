@@ -46,7 +46,7 @@ def main():
             "build-info.json",
         ]:
             archive.add(build / name, arcname=f"{stem}/{name}", filter=normalized)
-        for name in ["README.md", "LICENSE", "examples"]:
+        for name in ["README.md", "LICENSE", "examples", "patches"]:
             archive.add(ROOT / name, arcname=f"{stem}/{name}", filter=normalized)
     source = dist / f"asterisk-jio-{version}-source.tar.gz"
     with reproducible_archive(source) as archive:
@@ -57,9 +57,11 @@ def main():
             "scripts",
             "ci",
             "nix",
+            "patches",
             ".github",
             ".dockerignore",
             ".gitignore",
+            ".gitattributes",
             "Makefile",
             "LICENSE",
             "README.md",
