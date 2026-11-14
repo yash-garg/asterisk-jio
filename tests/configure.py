@@ -107,6 +107,7 @@ def configure(base, package, addon, port, jio_port):
     contact_user=+911234567890
     outbound_proxy=sip:127.0.0.1:{jio_port}\\;lr
     expiration=3600
+    max_random_initial_delay=0
     max_retries=0
     """)
 

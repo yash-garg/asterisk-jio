@@ -11,6 +11,8 @@ RUN curl --fail --location --retry 3 -o asterisk.tar.gz \
     && echo '3bd5ee040509a3d3cd9b1ba9520c18e6ec0a7e7981ca68c457dcd36ba3c54d94  asterisk.tar.gz' | sha256sum -c - \
     && tar xf asterisk.tar.gz && rm asterisk.tar.gz
 WORKDIR /opt/src/asterisk-22.11.0
+COPY patches/asterisk-22.11-stale-registration.patch /opt/src/stale-registration.patch
+RUN patch -p1 < /opt/src/stale-registration.patch
 RUN mkdir -p /opt/src/cache \
     && curl --fail --location --retry 3 -o /opt/src/cache/pjproject-2.17.tar.bz2 \
       https://raw.githubusercontent.com/asterisk/third-party/master/pjproject/2.17/pjproject-2.17.tar.bz2 \

@@ -1,0 +1,151 @@
+--- a/res/res_pjsip_outbound_registration.c
++++ b/res/res_pjsip_outbound_registration.c
+@@ -446,6 +446,9 @@
+ /*! \brief Amount of buffer time (in seconds) before expiration that we re-register at */
+ #define REREGISTER_BUFFER_TIME 10
+ 
++/*! \brief Maximum additional Digest attempts for stale nonces in one registration round. */
++#define MAX_STALE_AUTH_RETRIES 2
++
+ /*! \brief Size of the buffer for creating a unique string for the line */
+ #define LINE_PARAMETER_SIZE 8
+ 
+@@ -565,6 +568,8 @@
+ 	 * we need it to skip failed SRV entries if any.
+ 	 */
+ 	pjsip_tx_data *last_tdata;
++	/*! \brief Sent auth headers, before PJPROJECT can remove them while processing a challenge. */
++	pjsip_tx_data *auth_request;
+ 	/*! \brief Timer entry for retrying on temporal responses */
+ 	pj_timer_entry timer;
+ 	/*! \brief Optional line parameter placed into Contact */
+@@ -593,6 +598,8 @@
+ 	struct ast_sip_security_mechanism_vector server_security_mechanisms;
+ 	/*! CSeq number of last sent auth request. */
+ 	unsigned int auth_cseq;
++	/*! \brief Additional authenticated requests made for fresh stale-nonce challenges. */
++	unsigned int stale_auth_retries;
+ 	/*! \brief Serializer for stuff and things */
+ 	struct ast_taskprocessor *serializer;
+ 	/*! \brief Configured authentication credentials */
+@@ -937,6 +944,18 @@
+ 	pjsip_regc_set_transport(client_state->client, &selector);
+ 	ast_sip_tpselector_unref(&selector);
+ 
++	/* PJPROJECT may strip Authorization from the transaction's tdata before
++	 * calling us back on a stale challenge. Keep an independent snapshot for
++	 * checking the realm and nonce we actually sent; never resend this copy. */
++	if (client_state->auth_request) {
++		pjsip_tx_data_dec_ref(client_state->auth_request);
++		client_state->auth_request = NULL;
++	}
++	if (pjsip_endpt_create_tdata(ast_sip_get_pjsip_endpoint(), &client_state->auth_request) == PJ_SUCCESS) {
++		pjsip_tx_data_add_ref(client_state->auth_request);
++		client_state->auth_request->msg = pjsip_msg_clone(client_state->auth_request->pool, tdata->msg);
++	}
++
+ 	status = pjsip_regc_send(client_state->client, tdata);
+ 
+ 	/*
+@@ -1029,6 +1048,9 @@
+ 		|| pjsip_regc_register(client_state->client, PJ_FALSE, &tdata) != PJ_SUCCESS) {
+ 		return 0;
+ 	}
++
++	/* A scheduled or manual registration starts a new authentication round. */
++	client_state->stale_auth_retries = 0;
+ 
+ 	if (DEBUG_ATLEAST(1)) {
+ 		pjsip_regc_info info;
+@@ -1406,6 +1428,52 @@
+ }
+ 
+ 
++/*! \brief Permit a bounded retry for a replacement Digest nonce, not bad credentials. */
++static int can_retry_stale_challenge(struct registration_response *response)
++{
++	pjsip_hdr_e challenge_type;
++	pjsip_hdr_e authorization_type;
++	pjsip_www_authenticate_hdr *challenge;
++	pjsip_authorization_hdr *authorization;
++
++	if (!response->rdata || !response->client_state->auth_request
++		|| !response->client_state->auth_request->msg || response->retry_after
++		|| response->client_state->stale_auth_retries >= MAX_STALE_AUTH_RETRIES) {
++		return 0;
++	}
++
++	if (response->code == 401) {
++		challenge_type = PJSIP_H_WWW_AUTHENTICATE;
++		authorization_type = PJSIP_H_AUTHORIZATION;
++	} else if (response->code == 407) {
++		challenge_type = PJSIP_H_PROXY_AUTHENTICATE;
++		authorization_type = PJSIP_H_PROXY_AUTHORIZATION;
++	} else {
++		return 0;
++	}
++
++	for (challenge = pjsip_msg_find_hdr(response->rdata->msg_info.msg, challenge_type, NULL);
++		challenge;
++		challenge = pjsip_msg_find_hdr(response->rdata->msg_info.msg, challenge_type, challenge->next)) {
++		if (pj_stricmp2(&challenge->scheme, "Digest")
++			|| !challenge->challenge.digest.stale || !challenge->challenge.digest.nonce.slen) {
++			continue;
++		}
++		for (authorization = pjsip_msg_find_hdr(response->client_state->auth_request->msg, authorization_type, NULL);
++			authorization;
++			authorization = pjsip_msg_find_hdr(response->client_state->auth_request->msg, authorization_type, authorization->next)) {
++			if (!pj_stricmp2(&authorization->scheme, "Digest")
++				&& authorization->credential.digest.response.slen
++				&& authorization->credential.digest.nonce.slen
++				&& !pj_strcmp(&authorization->credential.digest.realm, &challenge->challenge.digest.realm)
++				&& pj_strcmp(&authorization->credential.digest.nonce, &challenge->challenge.digest.nonce)) {
++				return 1;
++			}
++		}
++	}
++	return 0;
++}
++
+ /*! \brief Callback function for handling a response to a registration attempt */
+ static int handle_registration_response(void *data)
+ {
+@@ -1439,7 +1507,8 @@
+ 		}
+ 	} else if ((response->code == 401 || response->code == 407 || response->code == 494)
+ 		&& (!response->client_state->auth_attempted
+-			|| response->rdata->msg_info.cseq->cseq != response->client_state->auth_cseq)) {
++			|| response->rdata->msg_info.cseq->cseq != response->client_state->auth_cseq
++			|| can_retry_stale_challenge(response))) {
+ 		int res;
+ 		pjsip_cseq_hdr *cseq_hdr;
+ 		pjsip_tx_data *tdata;
+@@ -1486,6 +1555,10 @@
+ 			return 0;
+ 		} else if (!ast_sip_create_request_with_auth(&response->client_state->outbound_auths,
+ 				response->rdata, response->old_request, &tdata)) {
++			if (response->client_state->auth_attempted
++				&& response->rdata->msg_info.cseq->cseq == response->client_state->auth_cseq) {
++				response->client_state->stale_auth_retries++;
++			}
+ 			response->client_state->auth_attempted = 1;
+ 			ast_debug(1, "Sending authenticated REGISTER to server '%s' from client '%s'\n",
+ 					server_uri, client_uri);
+@@ -1510,6 +1583,7 @@
+ 	}
+ 
+ 	response->client_state->auth_attempted = 0;
++	response->client_state->stale_auth_retries = 0;
+ 
+ 	if (PJSIP_IS_STATUS_IN_CLASS(response->code, 200)) {
+ 		/* Check if this is in regards to registering or unregistering */
+@@ -1709,6 +1783,9 @@
+ 	ast_free(client_state->transport_name);
+ 	ast_free(client_state->registration_name);
+ 	ast_free(client_state->user_agent);
++	if (client_state->auth_request) {
++		pjsip_tx_data_dec_ref(client_state->auth_request);
++	}
+ 	if (client_state->last_tdata) {
+ 		pjsip_tx_data_dec_ref(client_state->last_tdata);
+ 	}

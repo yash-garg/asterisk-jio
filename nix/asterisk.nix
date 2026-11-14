@@ -1,6 +1,7 @@
-# Export the exact configured headers alongside an otherwise unpatched Asterisk.
+# Keep the registration fix and the configured SDK in the same Asterisk build.
 { asterisk }:
 asterisk.overrideAttrs (old: {
+  patches = (old.patches or [ ]) ++ [ ../patches/asterisk-22.11-stale-registration.patch ];
   enableParallelBuilding = true;
   outputs = [
     "out"
